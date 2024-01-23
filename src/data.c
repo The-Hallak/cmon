@@ -1,5 +1,6 @@
 #include "../headers/data.h"
 #include "../headers/types.h"
+#include "../headers/tree.h"
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -19,10 +20,12 @@ CmonData* createData(char* key,void* value,int type){
 }
 
 char* getKey(CmonData* data){
+  if(data==NULL)return NULL;
   return data->key;
 }
 
 void* getValue(CmonData*data){
+  if(data==NULL)return NULL;
   return data->value;
 }
 
@@ -52,14 +55,17 @@ int isCmon(CmonData*data){
 }
 
 void printData(CmonData*data){
-  printf("key:%s\t",data->key);
+  printf("\"%s\":",data->key);
   switch(data->type){
     case STRING_TYPE:
-      printf("value:%s\ttype:string",(char*)data->value);
+      printf("\"%s\"",(char*)data->value);
       break;
     case INT_TYPE:
-      printf("value:%d\ttype:int",*(int*)data->value);
+      printf("%d",*(int*)data->value);
+      break;
+    case CMON_TYPE:
+      printTree((Cmon*)data->value);
       break;
   }
-  printf("\n");
+  printf(",");
 }

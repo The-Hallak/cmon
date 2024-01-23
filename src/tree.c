@@ -5,6 +5,10 @@
 #include <stdio.h>
 #include <unistd.h>
 
+#define NODE_EXIST_ERROR -2
+#define NODE_GEN_ERROR -1
+#define NODE_NOT_EXIST_ERROR -3
+
 struct CmonNode{
   struct CmonNode* parent;
   struct CmonNode* leftChild;
@@ -31,26 +35,16 @@ CmonNode* createNode(CmonData* data, CmonNode*parent){
   newNode->leftChild=NULL;
   newNode->rightChild=NULL;
   newNode->data=data;
-  newNode->leftDepth=0;
-  newNode->rightDepth=0;
+  newNode->leftDepth=1;
+  newNode->rightDepth=1;
   return newNode;
-}
-
-CmonNode* getLargestNode(CmonNode* currentNode){
-  if(currentNode==NULL)return NULL;
-  while(currentNode->rightChild!=NULL)currentNode=currentNode->rightChild;
-  return currentNode;
-}
-CmonNode* getSmallestNode(CmonNode* currentNode){
-  if(currentNode==NULL)return NULL;
-  while(currentNode->leftChild!=NULL)currentNode=currentNode->leftChild;
-  return currentNode;
 }
 
 int max(int a,int b){
   if(a>b)return a;
   return b;
 }
+
 void leftRotation(CmonNode** currentNode){
   CmonNode* rChild=(*currentNode)->rightChild;
   CmonNode* parent=(*currentNode)->parent;
@@ -97,26 +91,9 @@ void rightRotation(CmonNode** currentNode){
   *currentNode=lChild;
 }
 
-int addCmonNode(CmonNode** currentNode,CmonNode*parent,CmonData*data){
-  if(currentNode==NULL)return -1;
-  if(*currentNode==NULL){
-    *currentNode=createNode(data,parent);
-    return currentNode==NULL?-1:0;
-  }
-  int cmp=strcmp(getKey((*currentNode)->data),getKey(data));
-  if(cmp==0){
-    return -2;
-  }else if(cmp<0){
-    (*currentNode)->rightDepth=1+addCmonNode(&(*currentNode)->rightChild,*currentNode,data);
-    if((*currentNode)->rightDepth<=0)return (*currentNode)->rightDepth-1;
-  }else{
-    (*currentNode)->leftDepth=1+addCmonNode(&(*currentNode)->leftChild,*currentNode,data);
-    if((*currentNode)->leftDepth<=0)return (*currentNode)->leftDepth-1;
-  }
+void balance(CmonNode** currentNode){
   int difDepth=(*currentNode)->leftDepth-(*currentNode)->rightDepth;
-  if(abs(difDepth)<2){
-    return max((*currentNode)->leftDepth,(*currentNode)->rightDepth);
-  }
+  if(abs(difDepth)<2)return;
   if(difDepth<0){
     if((*currentNode)->rightChild->leftDepth >(*currentNode)->rightChild->rightDepth){
       rightRotation(&(*currentNode)->rightChild);
@@ -128,22 +105,123 @@ int addCmonNode(CmonNode** currentNode,CmonNode*parent,CmonData*data){
     }
     rightRotation(currentNode);
   }
+}
 
-  return max((*currentNode)->leftDepth,(*currentNode)->rightDepth);
+int calculateDepth(CmonNode*currentNode){
+  if(currentNode==NULL)return 0;
+  return max(currentNode->leftDepth,currentNode->rightDepth);
+}
+
+int addCmonNode(CmonNode** currentNode,CmonNode*parent,CmonData*data){
+  if(currentNode==NULL)return NODE_GEN_ERROR;
+  if(*currentNode==NULL){
+    *currentNode=createNode(data,parent);
+    return currentNode==NULL?NODE_GEN_ERROR:1;
+  }
+  int cmp=strcmp(getKey((*currentNode)->data),getKey(data));
+  if(cmp==0){
+    return NODE_EXIST_ERROR;
+  }else if(cmp<0){
+    int ret=addCmonNode(&(*currentNode)->rightChild,*currentNode,data);
+    if(ret<0)return ret;
+    (*currentNode)->rightDepth=1+ret;
+  }else{
+    int ret=addCmonNode(&(*currentNode)->leftChild,*currentNode,data);
+    if(ret<0)return ret;
+    (*currentNode)->leftDepth=1+ret;
+  }
+  int difDepth=(*currentNode)->leftDepth-(*currentNode)->rightDepth;
+  if(abs(difDepth)<2){
+    return calculateDepth(*currentNode);
+  }
+  balance(currentNode);
+  return calculateDepth(*currentNode);
 }
 
 int addCmon(Cmon* tree,CmonData* data){
-  if(tree==NULL)return -1; 
+  if(tree==NULL)return NODE_GEN_ERROR; 
   if(tree->head==NULL){
     tree->head=createNode(data,NULL);
-    return tree->head==NULL?-1:0;
+    return tree->head==NULL?NODE_GEN_ERROR:0;
   }
   return addCmonNode(&tree->head,NULL,data);
 }
 
+int deleteCmonNode(CmonNode**currentNode,char* key){
+  if(currentNode==NULL)return NODE_GEN_ERROR;
+  if(*currentNode==NULL)return NODE_NOT_EXIST_ERROR;
+  int cmp=strcmp(getKey((*currentNode)->data),key);
+  if(cmp<0){
+    int ret=deleteCmonNode(&(*currentNode)->rightChild,key);
+    if(ret<0)return ret;
+    (*currentNode)->rightDepth=ret+1;
+  }else if(cmp>0){
+    int ret=deleteCmonNode(&(*currentNode)->leftChild,key);
+    if(ret<0)return ret;
+    (*currentNode)->leftDepth=ret+1;
+  }
+  if(cmp!=0){
+    balance(currentNode);
+    return calculateDepth(*currentNode);
+  }
+  //in case the node has one child or no child
+  if((*currentNode)->leftChild==NULL){
+    CmonNode* temp=*currentNode;
+    if(temp->rightChild!=NULL) temp->rightChild->parent=temp->parent;
+    if(temp->parent->leftChild==temp){
+      temp->parent->leftChild=temp->rightChild;
+      temp->parent->leftDepth=temp->rightDepth;
+    }else{
+      temp->parent->rightChild=temp->rightChild;
+      temp->parent->rightDepth=temp->rightDepth;
+    }
+    *currentNode=temp->rightChild;
+    free(temp);
+    return calculateDepth(*currentNode);
+
+  }else if((*currentNode)->rightChild==NULL){
+    CmonNode* temp=*currentNode;
+    if(temp->leftChild!=NULL) temp->leftChild->parent=temp->parent;
+    if(temp->parent->leftChild==temp){
+      temp->parent->leftChild=temp->leftChild;
+    }else{
+      temp->parent->rightChild=temp->leftChild;
+    }
+    *currentNode=temp->leftChild;
+    free(temp);
+    return calculateDepth(*currentNode);
+  }
+  
+  CmonNode* candidate=(*currentNode)->leftChild;
+  while(candidate->rightChild!=NULL)candidate=candidate->rightChild;
+
+  (*currentNode)->data=candidate->data;
+  if(candidate->parent->leftChild==candidate){
+    candidate->parent->leftChild=candidate->leftChild;
+    candidate->parent->leftDepth=candidate->leftDepth;
+  }else{
+    candidate->parent->rightChild=candidate->leftChild;
+    candidate->parent->rightDepth=candidate->leftDepth;
+  }
+  if(candidate->leftChild!=NULL)candidate->leftChild->parent=candidate->parent;
+  CmonNode*temp=candidate->parent;
+  free(candidate);
+  while(temp!=(*currentNode)->parent){
+    temp->leftDepth=calculateDepth(temp->leftChild);  
+    temp->rightDepth=calculateDepth(temp->rightChild);  
+    balance(&temp);
+    temp=temp->parent;
+  }
+  return calculateDepth(*currentNode);
+}
+
+int deleteCmon(Cmon*tree,char*key){
+  if(tree==NULL)return NODE_GEN_ERROR;
+  return deleteCmonNode(&(tree->head),key);
+}
+
 void printNode(CmonNode* currentNode){
   if(currentNode==NULL)return;
-  printf("dif:%d\t",abs(currentNode->leftDepth-currentNode->rightDepth));
   printData(currentNode->data);
   printNode(currentNode->leftChild);
   printNode(currentNode->rightChild);
@@ -151,5 +229,7 @@ void printNode(CmonNode* currentNode){
 
 void printTree(Cmon* tree){
   if(tree==NULL)return;
+  printf("{");
   printNode(tree->head);
+  printf("}");
 }
